@@ -1,5 +1,5 @@
 import { globToRegExp, join, normalize, SEPARATOR } from 'jsr:@std/path@0.224.0'
-import { ensureFile } from 'jsr:@std/fs@0.224.0'
+import { ensureFile, exists } from 'jsr:@std/fs@0.224.0'
 
 export interface SiteMapEntry {
   loc: string // URL location included in the <loc> tag
@@ -119,6 +119,7 @@ async function generateSitemap(
 
 /**
  * Generates sitemap entries for markdown articles, respecting language settings.
+ * Checks if the articles directory exists before processing.
  * @param basename - The base URL
  * @param articlesDirectory - Directory containing article markdown files
  * @param options - Options for sitemap generation, including languages
@@ -132,6 +133,11 @@ async function generateArticlesSitemap(
   const sitemap: Sitemap = []
   const languages = options.languages || []
 
+  // Check if articlesDirectory exists; if not, return an empty sitemap
+  if (!(await exists(articlesDirectory))) {
+    return sitemap
+  }
+
   async function addMarkdownFile(path: string) {
     const relPath = path.substring(articlesDirectory.length).replace(
       /\.md$/,
@@ -143,11 +149,8 @@ async function generateArticlesSitemap(
     const pathname = normalize(`/${segments.join('/')}`).replace(/\/index$/, '')
 
     const urlPaths = languages.length > 0
-      ? languages.map((
-        lang,
-      ) => (lang === options.defaultLanguage
-        ? pathname
-        : `/${lang}${pathname}`)
+      ? languages.map((lang) =>
+        lang === options.defaultLanguage ? pathname : `/${lang}${pathname}`
       )
       : [pathname]
 
