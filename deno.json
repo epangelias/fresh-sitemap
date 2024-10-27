@@ -1,0 +1,20 @@
+{
+  "name": "@elsoul/fresh-sitemap",
+  "version": "0.1.0",
+  "description": "Lightweight global state management library for Fresh framework using Preact signals.",
+  "runtimes": ["deno", "browser"],
+  "exports": "./mod.ts",
+  "tasks": {
+    "dev": "deno test --watch mod.ts",
+    "test": "deno test --watch mod_test.ts"
+  },
+  "license": "Apache-2.0",
+  "imports": {
+  },
+  "fmt": {
+    "options": {
+      "semiColons": false,
+      "singleQuote": true
+    }
+  }
+}
