@@ -113,10 +113,13 @@ async function generateSitemap(
         : path.substring(distDirectory.length)
       let pathname = normalize(`/${relPath}`).split(SEPARATOR).join('/')
 
+      // Exclude files and directories with '_' prefix, grouping directories, and index files
       if (
         pathname.includes('(') || pathname.includes('[') ||
-        pathname.includes('_')
+        pathname.includes('_') || pathname.endsWith('index')
       ) continue
+
+      // Remove .tsx extension
       pathname = pathname.replace(/\.tsx$/, '')
 
       const isExcluded = exclude && exclude.test(pathname.substring(1))
@@ -129,6 +132,7 @@ async function generateSitemap(
         lastmod: (mtime ?? new Date()).toISOString(),
       })
 
+      // Add paths for each specified language
       options.languages?.forEach((lang) => {
         if (lang !== options.defaultLanguage) {
           sitemap.push({
@@ -159,9 +163,7 @@ async function generateArticlesSitemap(
   const sitemap: Sitemap = []
   const languages = options.languages || []
 
-  if (!(await exists(articlesDirectory))) {
-    return sitemap
-  }
+  if (!(await exists(articlesDirectory))) return sitemap
 
   async function addMarkdownFile(path: string) {
     const relPath = path.substring(articlesDirectory.length).replace(
@@ -174,8 +176,11 @@ async function generateArticlesSitemap(
     const pathname = normalize(`/${segments.join('/')}`).replace(/\/index$/, '')
 
     const urlPaths = languages.length > 0
-      ? languages.map((lang) =>
-        lang === options.defaultLanguage ? pathname : `/${lang}${pathname}`
+      ? languages.map((
+        lang,
+      ) => (lang === options.defaultLanguage
+        ? pathname
+        : `/${lang}${pathname}`)
       )
       : [pathname]
 

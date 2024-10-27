@@ -30,27 +30,28 @@ languages and a default language without a language prefix.
 
    ```typescript
    // Example usage
-   await saveSitemap(
-     'https://example.com',
+   await saveSitemapAndRobots(
+     `https://${appInfo.domain}`,
      './routes',
      './articles',
      './static/sitemap.xml',
+     './static/robots.txt',
      { languages: ['en', 'ja'], defaultLanguage: 'en' },
    )
    ```
 
 3. **Options**
 
-   - `include`: Glob pattern for including files.
-   - `exclude`: Glob pattern for excluding files.
-   - `languages`: Array of languages, such as `["en", "ja"]`.
-   - `defaultLanguage`: Language that doesn’t require a prefix in the URL.
+- `include`: Glob pattern for including files.
+- `exclude`: Glob pattern for excluding files.
+- `languages`: Array of languages, such as `["en", "ja"]`.
+- `defaultLanguage`: Language that doesn’t require a prefix in the URL.
 
 ## API Reference
 
 - **saveSitemap**(basename: `string`, distDirectory: `string`,
   articlesDirectory: `string`, outputPath: `string`, options: `SiteMapOptions`)
-  - Generates a sitemap and saves it to the specified file path.
+- Generates a sitemap and saves it to the specified file path.
 
 ## Contributing
 
@@ -69,3 +70,6 @@ The package is available as open source under the terms of the
 Everyone interacting in the SKEET project’s codebases, issue trackers, chat
 rooms, and mailing lists is expected to follow the
 [code of conduct](https://github.com/elsoul/skeet/blob/master/CODE_OF_CONDUCT.md).
+
+```
+```
