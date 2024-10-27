@@ -111,37 +111,38 @@ async function generateSitemap(
       const relPath = distDirectory === '.'
         ? path
         : path.substring(distDirectory.length)
-      const segments = normalize(`/${relPath}`).split(SEPARATOR).map((
-        segment,
-      ) => segment.replace(/\.tsx$/, ''))
+      const segments = normalize(`/${relPath}`).split(SEPARATOR)
 
-      // Check each segment and filter out unwanted segments
+      // Filter out unwanted segments at this level
       const filteredSegments = segments.filter((segment) => {
         return !(
-          segment.startsWith('_') || // Ignore files that start with '_'
-          segment === 'index' || // Ignore 'index' files
-          segment.match(/\(.*?\)/) // Ignore segments with '(...)'
+          segment.startsWith('_') || // Exclude segments starting with '_'
+          segment === 'index' || // Exclude 'index' segments
+          segment.match(/\(.*?\)/) // Exclude segments like '(default)'
         )
       })
 
       if (filteredSegments.length === 0) continue // Skip if no valid segments remain
 
+      // Construct valid pathname
       const pathname = `/${filteredSegments.join('/')}`
-        .replace(/\/+/g, '/') // Replace multiple slashes with a single slash
+
+      // Apply include/exclude filters if specified
       const isExcluded = exclude && exclude.test(pathname.substring(1))
       const isIncluded = !include || include.test(pathname.substring(1))
       if (isExcluded || !isIncluded) continue
 
       const { mtime } = await Deno.stat(path)
       sitemap.push({
-        loc: basename.replace(/\/+$/, '') + pathname,
+        loc: `${basename.replace(/\/+$/, '')}${pathname}`,
         lastmod: (mtime ?? new Date()).toISOString(),
       })
 
+      // Add paths for each specified language, if applicable
       options.languages?.forEach((lang) => {
         if (lang !== options.defaultLanguage) {
           sitemap.push({
-            loc: `${basename}/${lang}${pathname}`.replace(/\/+/g, '/'),
+            loc: `${basename}/${lang}${pathname}`,
             lastmod: (mtime ?? new Date()).toISOString(),
           })
         }
