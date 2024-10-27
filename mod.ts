@@ -127,20 +127,21 @@ async function generateSitemap(
       if (filteredSegments.length === 0) continue // Skip if no valid segments remain
 
       const pathname = `/${filteredSegments.join('/')}`
+        .replace(/\/+/g, '/') // Replace multiple slashes with a single slash
       const isExcluded = exclude && exclude.test(pathname.substring(1))
       const isIncluded = !include || include.test(pathname.substring(1))
       if (isExcluded || !isIncluded) continue
 
       const { mtime } = await Deno.stat(path)
       sitemap.push({
-        loc: basename + pathname,
+        loc: basename.replace(/\/+$/, '') + pathname,
         lastmod: (mtime ?? new Date()).toISOString(),
       })
 
       options.languages?.forEach((lang) => {
         if (lang !== options.defaultLanguage) {
           sitemap.push({
-            loc: `${basename}/${lang}${pathname}`,
+            loc: `${basename}/${lang}${pathname}`.replace(/\/+/g, '/'),
             lastmod: (mtime ?? new Date()).toISOString(),
           })
         }
@@ -191,7 +192,7 @@ async function generateArticlesSitemap(
     for (const urlPath of urlPaths) {
       const { mtime } = await Deno.stat(path)
       sitemap.push({
-        loc: basename + urlPath,
+        loc: basename.replace(/\/+$/, '') + urlPath,
         lastmod: (mtime ?? new Date()).toISOString(),
       })
     }
