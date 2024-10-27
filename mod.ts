@@ -114,11 +114,9 @@ async function generateSitemap(
       let pathname = normalize(`/${relPath}`).split(SEPARATOR).join('/')
 
       // Exclude grouping and dynamic directories, _-prefixed files, and index files
-      if (
-        pathname.includes('(') || pathname.includes('[') ||
-        pathname.includes('_')
-      ) continue
-      pathname = pathname.replace(/\.tsx$/, '').replace(/\/index$/, '')
+      pathname = pathname.replace(/\(.*?\)/g, '') // Remove content within parentheses
+      if (pathname.includes('_') || pathname.endsWith('index')) continue
+      pathname = pathname.replace(/\.tsx$/, '')
 
       const isExcluded = exclude && exclude.test(pathname.substring(1))
       const isIncluded = !include || include.test(pathname.substring(1))

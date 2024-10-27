@@ -1,6 +1,6 @@
 {
   "name": "@elsoul/fresh-sitemap",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Lightweight global state management library for Fresh framework using Preact signals.",
   "runtimes": ["deno", "browser"],
   "exports": "./mod.ts",
