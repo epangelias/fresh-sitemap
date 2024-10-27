@@ -2,17 +2,17 @@ import { globToRegExp, join, normalize, SEPARATOR } from 'jsr:@std/path@0.224.0'
 import { ensureFile, exists } from 'jsr:@std/fs@0.224.0'
 
 export interface SiteMapEntry {
-  loc: string // URL location included in the <loc> tag
-  lastmod: string // Last modification date in ISO format for the <lastmod> tag
+  loc: string
+  lastmod: string
 }
 
 export type Sitemap = SiteMapEntry[]
 
 export interface SiteMapOptions {
-  include?: string // Glob pattern for files to include
-  exclude?: string // Glob pattern for files to exclude
-  languages?: string[] // Array of supported language codes
-  defaultLanguage?: string // Default language for URLs without language prefix
+  include?: string
+  exclude?: string
+  languages?: string[]
+  defaultLanguage?: string
 }
 
 /**
@@ -40,28 +40,54 @@ export async function generateSitemapXML(
 }
 
 /**
- * Saves the generated sitemap XML to a specified file path.
+ * Generates the robots.txt file content.
+ * @param domain - The domain of the website (e.g., 'example.com')
+ * @returns Generated robots.txt content
+ */
+function generateRobotsTxt(domain: string): string {
+  return `# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://${domain}
+
+# Sitemaps
+Sitemap: https://${domain}/sitemap.xml
+`
+}
+
+/**
+ * Saves the generated sitemap XML and robots.txt to the specified file paths.
  * @param basename - The base URL of the website
  * @param distDirectory - Directory containing route files
  * @param articlesDirectory - Directory containing articles
- * @param outputPath - Path where sitemap.xml will be saved
+ * @param sitemapPath - Path where sitemap.xml will be saved
+ * @param robotsPath - Path where robots.txt will be saved
  * @param options - Options for sitemap generation
  */
-export async function saveSitemap(
+export async function saveSitemapAndRobots(
   basename: string,
   distDirectory: string,
   articlesDirectory: string,
-  outputPath: string,
+  sitemapPath: string,
+  robotsPath: string,
   options: SiteMapOptions = {},
 ): Promise<void> {
+  const domain = new URL(basename).hostname
   const sitemapXML = await generateSitemapXML(
     basename,
     distDirectory,
     articlesDirectory,
     options,
   )
-  await ensureFile(outputPath)
-  await Deno.writeTextFile(outputPath, sitemapXML)
+  const robotsTxt = generateRobotsTxt(domain)
+
+  await ensureFile(sitemapPath)
+  await Deno.writeTextFile(sitemapPath, sitemapXML)
+
+  await ensureFile(robotsPath)
+  await Deno.writeTextFile(robotsPath, robotsTxt)
 }
 
 /**
@@ -85,12 +111,14 @@ async function generateSitemap(
       const relPath = distDirectory === '.'
         ? path
         : path.substring(distDirectory.length)
-      const pathname = normalize(`/${relPath}`).split(SEPARATOR).join('/')
+      let pathname = normalize(`/${relPath}`).split(SEPARATOR).join('/')
 
-      // Ignore grouping directories and dynamic routes
-      if (pathname.includes('(') || pathname.includes('[')) continue
+      if (
+        pathname.includes('(') || pathname.includes('[') ||
+        pathname.includes('_')
+      ) continue
+      pathname = pathname.replace(/\.tsx$/, '')
 
-      // Apply include/exclude filters if specified
       const isExcluded = exclude && exclude.test(pathname.substring(1))
       const isIncluded = !include || include.test(pathname.substring(1))
       if (isExcluded || !isIncluded) continue
@@ -101,7 +129,6 @@ async function generateSitemap(
         lastmod: (mtime ?? new Date()).toISOString(),
       })
 
-      // Add paths for each specified language
       options.languages?.forEach((lang) => {
         if (lang !== options.defaultLanguage) {
           sitemap.push({
@@ -119,7 +146,6 @@ async function generateSitemap(
 
 /**
  * Generates sitemap entries for markdown articles, respecting language settings.
- * Checks if the articles directory exists before processing.
  * @param basename - The base URL
  * @param articlesDirectory - Directory containing article markdown files
  * @param options - Options for sitemap generation, including languages
@@ -133,7 +159,6 @@ async function generateArticlesSitemap(
   const sitemap: Sitemap = []
   const languages = options.languages || []
 
-  // Check if articlesDirectory exists; if not, return an empty sitemap
   if (!(await exists(articlesDirectory))) {
     return sitemap
   }
