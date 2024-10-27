@@ -113,14 +113,12 @@ async function generateSitemap(
         : path.substring(distDirectory.length)
       let pathname = normalize(`/${relPath}`).split(SEPARATOR).join('/')
 
-      // Exclude files and directories with '_' prefix, grouping directories, and index files
+      // Exclude grouping and dynamic directories, _-prefixed files, and index files
       if (
         pathname.includes('(') || pathname.includes('[') ||
-        pathname.includes('_') || pathname.endsWith('index')
+        pathname.includes('_')
       ) continue
-
-      // Remove .tsx extension
-      pathname = pathname.replace(/\.tsx$/, '')
+      pathname = pathname.replace(/\.tsx$/, '').replace(/\/index$/, '')
 
       const isExcluded = exclude && exclude.test(pathname.substring(1))
       const isIncluded = !include || include.test(pathname.substring(1))
@@ -132,7 +130,6 @@ async function generateSitemap(
         lastmod: (mtime ?? new Date()).toISOString(),
       })
 
-      // Add paths for each specified language
       options.languages?.forEach((lang) => {
         if (lang !== options.defaultLanguage) {
           sitemap.push({
