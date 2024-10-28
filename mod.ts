@@ -116,6 +116,14 @@ async function generateSitemap(
       pathMap[path] = 0 // Set to 0 if the path contains '_'
       return // Exit early if excluded
     }
+    if (path.includes('[')) {
+      pathMap[path] = 0 // Set to 0 if the path contains '_'
+      return // Exit early if excluded
+    }
+    if (path.includes(']')) {
+      pathMap[path] = 0 // Set to 0 if the path contains '_'
+      return // Exit early if excluded
+    }
   }
 
   // Recursively collect all paths in the directory
@@ -171,7 +179,8 @@ async function generateSitemap(
         .filter((segment) => checkedSegments[segment] === 1)
         .join('/')
 
-      const cleanedPath = neededSegmentsPath.replace(/\index\.tsx$/, '')
+      const cleanedPath = neededSegmentsPath.replace(/\.tsx$/, '')
+        .replace(/\index$/, '')
 
       sitemapSet.add(
         JSON.stringify({
