@@ -177,6 +177,8 @@ async function generateSitemap(
         .filter((segment) => checkedSegments[segment] === 1)
         .join('/')
 
+      console.log('Needed segments path:', neededSegmentsPath)
+
       const cleanedPath = neededSegmentsPath.replace(/\/index\.tsx$/, '')
 
       // Add the cleaned path to the sitemap if valid
