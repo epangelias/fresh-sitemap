@@ -106,14 +106,6 @@ async function generateSitemap(
 
     // Split segments and check if any segment should exclude this path
     const segments = relPath.split(SEPARATOR)
-    if (
-      segments.some((segment) =>
-        segment.startsWith('_') || segment.includes('(')
-      )
-    ) {
-      console.log(`Excluded due to _ or (): ${path}`)
-      return // Skip paths with `_` or `()` without modifying or replacing
-    }
 
     // Construct normalized path and mark it for inclusion
     const normalizedPath = `/${segments.join('/')}`.replace(/\.tsx$/, '')
