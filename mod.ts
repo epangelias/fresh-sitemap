@@ -91,8 +91,7 @@ export async function saveSitemapAndRobots(
 }
 
 /**
- * Generates sitemap entries for static routes, excluding unnecessary paths such as
- * dynamic routes, private routes (e.g., _ files), and index files.
+ * Generates sitemap entries for static routes, excluding dynamic and grouping directories.
  * @param basename - The base URL
  * @param distDirectory - Directory containing routes
  * @param options - Options for sitemap generation
@@ -108,21 +107,23 @@ async function generateSitemap(
   const include = options.include ? globToRegExp(options.include) : null
   const exclude = options.exclude ? globToRegExp(options.exclude) : null
 
-  // Helper function to process and clean each path
-  function processPath(relPath: string): string | null {
-    const segments = relPath
-      .split(SEPARATOR)
-      .filter((segment) =>
-        !segment.startsWith('_') && // Exclude private routes
-        !segment.startsWith('(') && // Exclude grouping directories
-        segment !== 'index' // Exclude 'index' files
-      )
+  // Helper function to process and filter each path segment-wise as an object
+  function processPathSegments(relPath: string): string | null {
+    const segments = relPath.split(SEPARATOR).map((segment) => {
+      // Ignore entire path if any segment starts with '_' or contains '_'
+      if (segment.includes('_')) {
+        return null
+      }
+      // Remove .tsx extension for remaining segments
+      return segment.endsWith('.tsx') ? segment.slice(0, -4) : segment
+    }).filter(Boolean) as string[] // Filter out null segments
+
     if (segments.length === 0) return null
 
-    let pathname = normalize(`/${segments.join('/')}`)
-    pathname = pathname.replace(/\.tsx$/, '') // Remove .tsx extension
+    // Reconstruct the valid segments to a path
+    const pathname = normalize(`/${segments.join('/')}`)
 
-    // Check include/exclude patterns only if they are RegExp instances
+    // Check inclusion/exclusion conditions if provided
     if (
       (exclude instanceof RegExp && exclude.test(pathname)) ||
       (include instanceof RegExp && !include.test(pathname))
@@ -132,16 +133,19 @@ async function generateSitemap(
     return pathname
   }
 
-  // Collect and process paths
+  // Collect and process paths by directory
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
+      // Process only .tsx files
+      if (!path.endsWith('.tsx')) continue
       const relPath = distDirectory === '.'
         ? path
         : path.substring(distDirectory.length)
-      const pathname = processPath(relPath)
-      if (!pathname) continue // Skip if pathname is null or filtered
+      const pathname = processPathSegments(relPath)
+      if (!pathname) continue // Skip if pathname is null
 
       const { mtime } = await Deno.stat(path)
+      // Store each path as a unique JSON string
       sitemapSet.add(
         JSON.stringify({
           loc: basename + pathname,
@@ -149,7 +153,7 @@ async function generateSitemap(
         }),
       )
 
-      // Add localized paths if languages are specified
+      // Add paths for each specified language
       options.languages?.forEach((lang) => {
         if (lang !== options.defaultLanguage) {
           sitemapSet.add(
@@ -165,7 +169,7 @@ async function generateSitemap(
 
   await addDirectory(distDirectory)
 
-  // Convert set entries to the sitemap array
+  // Convert set entries back to objects for the final sitemap array
   for (const entry of sitemapSet) {
     sitemap.push(JSON.parse(entry))
   }
