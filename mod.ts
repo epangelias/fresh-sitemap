@@ -187,7 +187,7 @@ async function generateSitemap(
       if (cleanedPath) {
         sitemapSet.add(
           JSON.stringify({
-            loc: basename + cleanedPath,
+            loc: basename + '/' + cleanedPath,
             lastmod: (mtime ?? new Date()).toISOString(),
           }),
         )
