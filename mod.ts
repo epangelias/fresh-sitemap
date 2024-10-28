@@ -88,53 +88,35 @@ export async function saveSitemapAndRobots(
   await Deno.writeTextFile(robotsPath, robotsTxt)
 }
 
-/**
- * Generates sitemap entries for static routes, excluding dynamic and grouping directories.
- * Logs each processing step to help debug filtering issues.
- * @param basename - The base URL
- * @param distDirectory - Directory containing routes
- * @param options - Options for sitemap generation
- * @returns Array of sitemap entries
- */
 async function generateSitemap(
   basename: string,
   distDirectory: string,
   options: SiteMapOptions,
 ): Promise<Sitemap> {
-  const sitemapSet = new Set<string>() // Collects unique paths
-  const pathMap: Record<string, number> = {} // Records path flags
+  const sitemapSet = new Set<string>() // Unique paths for the final sitemap
+  const pathMap: Record<string, number> = {} // Store paths with a flag (1 for include, 0 for exclude)
 
-  // Process each path segment and set flags in pathMap
+  // Process each path segment without modifying it
   function processPathSegments(path: string): void {
-    // Ignore non-`.tsx` files
+    // Skip non-.tsx files
     if (!path.endsWith('.tsx')) return
-
-    // Normalize path
     const relPath = distDirectory === '.'
       ? path
       : path.substring(distDirectory.length)
-    const segments = relPath.split(SEPARATOR).map((segment) =>
-      segment.replace(/\.tsx$/, '')
-    )
 
-    // If any segment contains `_` or `()`, ignore the entire path
+    // Split segments and check if any segment should exclude this path
+    const segments = relPath.split(SEPARATOR)
     if (
       segments.some((segment) =>
         segment.startsWith('_') || segment.includes('(')
       )
     ) {
-      console.log(`Excluded due to _ or (): ${segments.join('/')}`)
-      return
+      console.log(`Excluded due to _ or (): ${path}`)
+      return // Skip paths with `_` or `()` without modifying or replacing
     }
 
-    // Construct normalized path for inclusion
-    let normalizedPath = `/${segments.join('/')}`
-
-    // Remove `index` at the end of the path if present
-    if (normalizedPath.endsWith('/index')) {
-      normalizedPath = normalizedPath.replace(/\/index$/, '')
-    }
-
+    // Construct normalized path and mark it for inclusion
+    const normalizedPath = `/${segments.join('/')}`.replace(/\.tsx$/, '')
     pathMap[normalizedPath] = 1
     console.log(
       `Path added to pathMap: ${normalizedPath}, pathMap state:`,
@@ -142,7 +124,7 @@ async function generateSitemap(
     )
   }
 
-  // Retrieve all paths and process segments
+  // Recursively collect all paths in the directory
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
       processPathSegments(path)
@@ -150,34 +132,45 @@ async function generateSitemap(
   }
 
   await addDirectory(distDirectory)
-
   console.log('Initial pathMap after processing all segments:', pathMap)
 
-  // Add unique paths to the Sitemap array, logging each addition
+  // Remove `index` from the end of paths for cleaner URLs
+  for (const path in pathMap) {
+    if (pathMap[path] === 1 && path.endsWith('/index')) {
+      const cleanedPath = path.replace(/\/index$/, '')
+      pathMap[cleanedPath] = 1
+      delete pathMap[path]
+      console.log(
+        `Adjusted for index removal: ${cleanedPath}, pathMap state:`,
+        pathMap,
+      )
+    }
+  }
+  console.log('PathMap after index removal:', pathMap)
+
+  // Populate sitemap entries based on pathMap
   for (const path in pathMap) {
     if (pathMap[path] === 1) {
-      const filePath = join(distDirectory, path)
+      const filePath = join(distDirectory, path + '.tsx')
       if (!(await exists(filePath))) {
         console.log(`File not found, skipping: ${filePath}`)
         continue
       }
       const { mtime } = await Deno.stat(filePath)
-      const sitemapEntry = JSON.stringify({
-        loc: basename + path,
-        lastmod: (mtime ?? new Date()).toISOString(),
-      })
-      sitemapSet.add(sitemapEntry)
-      console.log(`Added to sitemapSet: ${sitemapEntry}`)
+      sitemapSet.add(
+        JSON.stringify({
+          loc: basename + path,
+          lastmod: (mtime ?? new Date()).toISOString(),
+        }),
+      )
 
       options.languages?.forEach((lang) => {
         if (lang !== options.defaultLanguage) {
-          const langSitemapEntry = JSON.stringify({
-            loc: `${basename}/${lang}${path}`,
-            lastmod: (mtime ?? new Date()).toISOString(),
-          })
-          sitemapSet.add(langSitemapEntry)
-          console.log(
-            `Added to sitemapSet for language '${lang}': ${langSitemapEntry}`,
+          sitemapSet.add(
+            JSON.stringify({
+              loc: `${basename}/${lang}${path}`,
+              lastmod: (mtime ?? new Date()).toISOString(),
+            }),
           )
         }
       })
@@ -185,14 +178,9 @@ async function generateSitemap(
   }
 
   console.log('Final pathMap:', pathMap)
-  console.log('Final Sitemap Set:', Array.from(sitemapSet))
+  console.log('Final Sitemap Set:', sitemapSet)
 
-  const sitemapArray = Array.from(sitemapSet).map((entry) =>
-    JSON.parse(entry)
-  ) as Sitemap
-  console.log('Final Sitemap Array:', sitemapArray)
-
-  return sitemapArray
+  return Array.from(sitemapSet).map((entry) => JSON.parse(entry)) as Sitemap
 }
 
 /**
