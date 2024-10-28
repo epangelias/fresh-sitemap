@@ -104,32 +104,37 @@ async function generateSitemap(
   const sitemapSet = new Set<string>() // Collects unique paths
   const pathMap: Record<string, number> = {} // Records path flags
 
-  // Logs each path segment during processing
+  // Process each path segment and set flags in pathMap
   function processPathSegments(path: string): void {
+    // Ignore non-`.tsx` files
     if (!path.endsWith('.tsx')) return
+
+    // Normalize path
     const relPath = distDirectory === '.'
       ? path
       : path.substring(distDirectory.length)
     const segments = relPath.split(SEPARATOR).map((segment) =>
       segment.replace(/\.tsx$/, '')
     )
-    const normalizedPath = `/${segments.join('/')}`
 
-    // Ignore paths with `_` or `()` segments
+    // If any segment contains `_` or `()`, ignore the entire path
     if (
       segments.some((segment) =>
         segment.startsWith('_') || segment.includes('(')
       )
     ) {
-      pathMap[normalizedPath] = 0
-      console.log(
-        `Excluded by filter (_ or ()): ${normalizedPath}, pathMap state:`,
-        pathMap,
-      )
+      console.log(`Excluded due to _ or (): ${segments.join('/')}`)
       return
     }
 
-    // Initialize path in pathMap and log it
+    // Construct normalized path for inclusion
+    let normalizedPath = `/${segments.join('/')}`
+
+    // Remove `index` at the end of the path if present
+    if (normalizedPath.endsWith('/index')) {
+      normalizedPath = normalizedPath.replace(/\/index$/, '')
+    }
+
     pathMap[normalizedPath] = 1
     console.log(
       `Path added to pathMap: ${normalizedPath}, pathMap state:`,
@@ -137,7 +142,7 @@ async function generateSitemap(
     )
   }
 
-  // Retrieves all paths and processes each segment
+  // Retrieve all paths and process segments
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
       processPathSegments(path)
@@ -147,23 +152,6 @@ async function generateSitemap(
   await addDirectory(distDirectory)
 
   console.log('Initial pathMap after processing all segments:', pathMap)
-
-  // Remove `index` as the last segment and log any adjustments
-  for (const path in pathMap) {
-    if (pathMap[path] === 1) {
-      const cleanedPath = path.replace(/\/index$/, '')
-      if (cleanedPath !== path) {
-        pathMap[cleanedPath] = 1
-        delete pathMap[path]
-        console.log(
-          `Adjusted for index removal: ${cleanedPath}, pathMap state:`,
-          pathMap,
-        )
-      }
-    }
-  }
-
-  console.log('PathMap after index removal:', pathMap)
 
   // Add unique paths to the Sitemap array, logging each addition
   for (const path in pathMap) {
