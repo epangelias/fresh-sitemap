@@ -114,17 +114,13 @@ async function generateSitemap(
     // Exclude paths containing '_'
     if (path.includes('_')) {
       pathMap[path] = 0 // Set to 0 if the path contains '_'
-      console.log(`Excluded due to _: ${path}`)
       return // Exit early if excluded
     }
-
-    console.log(`Path added to pathMap: ${path}, pathMap state:`, pathMap)
   }
 
   // Recursively collect all paths in the directory
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
-      console.log('Processing path:', path)
       processPathSegments(path)
     }
   }
@@ -154,14 +150,12 @@ async function generateSitemap(
   }
 
   await addDirectory(distDirectory)
-  console.log('Initial pathMap after processing all segments:', pathMap)
 
   // Populate sitemap entries based on pathMap
   for (const path in pathMap) {
     if (pathMap[path] === 1) {
       const filePath = join(path) // Use original path for checking
       if (!(await exists(filePath))) {
-        console.log(`File not found, skipping: ${filePath}`)
         continue // Skip if file does not exist
       }
       const { mtime } = await Deno.stat(filePath)
@@ -177,33 +171,25 @@ async function generateSitemap(
         .filter((segment) => checkedSegments[segment] === 1)
         .join('/')
 
-      console.log('Needed segments path:', neededSegmentsPath)
-
       const cleanedPath = neededSegmentsPath.replace(/\index\.tsx$/, '')
 
-      console.log('Cleaned path:', cleanedPath)
+      sitemapSet.add(
+        JSON.stringify({
+          loc: basename + '/' + cleanedPath,
+          lastmod: (mtime ?? new Date()).toISOString(),
+        }),
+      )
 
-      // Add the cleaned path to the sitemap if valid
-      if (cleanedPath) {
-        sitemapSet.add(
-          JSON.stringify({
-            loc: basename + '/' + cleanedPath,
-            lastmod: (mtime ?? new Date()).toISOString(),
-          }),
-        )
-
-        // Handle language variations for the sitemap
-        options.languages?.forEach((lang) => {
-          if (lang !== options.defaultLanguage) {
-            sitemapSet.add(
-              JSON.stringify({
-                loc: `${basename}/${lang}${cleanedPath}`,
-                lastmod: (mtime ?? new Date()).toISOString(),
-              }),
-            )
-          }
-        })
-      }
+      options.languages?.forEach((lang) => {
+        if (lang !== options.defaultLanguage) {
+          sitemapSet.add(
+            JSON.stringify({
+              loc: `${basename}/${lang}${cleanedPath}`,
+              lastmod: (mtime ?? new Date()).toISOString(),
+            }),
+          )
+        }
+      })
     }
   }
 
