@@ -9,8 +9,6 @@ export interface SiteMapEntry {
 export type Sitemap = SiteMapEntry[]
 
 export interface SiteMapOptions {
-  include?: string
-  exclude?: string
   languages?: string[]
   defaultLanguage?: string
 }
@@ -92,6 +90,7 @@ export async function saveSitemapAndRobots(
 
 /**
  * Generates sitemap entries for static routes, excluding dynamic and grouping directories.
+ * Ensures `_` and `()` directories and `index.tsx` files are excluded.
  * @param basename - The base URL
  * @param distDirectory - Directory containing routes
  * @param options - Options for sitemap generation
@@ -102,63 +101,75 @@ async function generateSitemap(
   distDirectory: string,
   options: SiteMapOptions,
 ): Promise<Sitemap> {
-  const sitemapSet = new Set<string>() // To store unique paths
-  const sitemap: Sitemap = []
-  const include = options.include ? globToRegExp(options.include) : null
-  const exclude = options.exclude ? globToRegExp(options.exclude) : null
+  const sitemapSet = new Set<string>() // Collects unique paths
+  const pathMap: Record<string, number> = {} // Records path flags
 
-  // Helper function to process and filter each path segment-wise as an object
-  function processPathSegments(relPath: string): string | null {
-    const segments = relPath.split(SEPARATOR).map((segment) => {
-      // Ignore entire path if any segment starts with '_' or contains '_'
-      if (segment.includes('_')) {
-        return null
-      }
-      // Remove .tsx extension for remaining segments
-      return segment.endsWith('.tsx') ? segment.slice(0, -4) : segment
-    }).filter(Boolean) as string[] // Filter out null segments
+  // Process each segment of the path
+  function processPathSegments(path: string): void {
+    // Ignore non-.tsx files
+    if (!path.endsWith('.tsx')) return
+    const relPath = distDirectory === '.'
+      ? path
+      : path.substring(distDirectory.length)
+    const segments = relPath.split(SEPARATOR).map((segment) =>
+      segment.replace(/\.tsx$/, '')
+    )
+    const normalizedPath = `/${segments.join('/')}`
 
-    if (segments.length === 0) return null
+    // Initialize path in pathMap
+    pathMap[normalizedPath] = 1
 
-    // Reconstruct the valid segments to a path
-    const pathname = normalize(`/${segments.join('/')}`)
-
-    // Check inclusion/exclusion conditions if provided
-    if (
-      (exclude instanceof RegExp && exclude.test(pathname)) ||
-      (include instanceof RegExp && !include.test(pathname))
-    ) {
-      return null
+    // If any segment contains `_`, mark path as 0 to exclude
+    if (segments.some((segment) => segment.startsWith('_'))) {
+      pathMap[normalizedPath] = 0
     }
-    return pathname
   }
 
-  // Collect and process paths by directory
+  // Retrieve all paths recursively
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
-      // Process only .tsx files
-      if (!path.endsWith('.tsx')) continue
-      const relPath = distDirectory === '.'
-        ? path
-        : path.substring(distDirectory.length)
-      const pathname = processPathSegments(relPath)
-      if (!pathname) continue // Skip if pathname is null
+      processPathSegments(path)
+    }
+  }
 
-      const { mtime } = await Deno.stat(path)
-      // Store each path as a unique JSON string
+  await addDirectory(distDirectory)
+
+  // Remove segments with `()` characters
+  for (const path in pathMap) {
+    if (pathMap[path] === 1) {
+      const cleanedPath = path.replace(/\(.*?\)/g, '')
+      pathMap[cleanedPath] = 1
+      delete pathMap[path]
+    }
+  }
+
+  // Remove `index` as the last segment
+  for (const path in pathMap) {
+    if (pathMap[path] === 1 && path.endsWith('/index')) {
+      const cleanedPath = path.replace(/\/index$/, '')
+      pathMap[cleanedPath] = 1
+      delete pathMap[path]
+    }
+  }
+
+  // Add unique paths to the Sitemap array
+  for (const path in pathMap) {
+    if (pathMap[path] === 1) {
+      const filePath = join(distDirectory, path)
+      if (!(await exists(filePath))) continue // Check if path exists
+      const { mtime } = await Deno.stat(filePath)
       sitemapSet.add(
         JSON.stringify({
-          loc: basename + pathname,
+          loc: basename + path,
           lastmod: (mtime ?? new Date()).toISOString(),
         }),
       )
 
-      // Add paths for each specified language
       options.languages?.forEach((lang) => {
         if (lang !== options.defaultLanguage) {
           sitemapSet.add(
             JSON.stringify({
-              loc: `${basename}/${lang}${pathname}`,
+              loc: `${basename}/${lang}${path}`,
               lastmod: (mtime ?? new Date()).toISOString(),
             }),
           )
@@ -167,14 +178,7 @@ async function generateSitemap(
     }
   }
 
-  await addDirectory(distDirectory)
-
-  // Convert set entries back to objects for the final sitemap array
-  for (const entry of sitemapSet) {
-    sitemap.push(JSON.parse(entry))
-  }
-
-  return sitemap
+  return Array.from(sitemapSet).map((entry) => JSON.parse(entry)) as Sitemap
 }
 
 /**
