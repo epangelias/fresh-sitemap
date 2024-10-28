@@ -116,13 +116,15 @@ async function generateSitemap(
     )
     const normalizedPath = `/${segments.join('/')}`
 
+    // Ignore paths with `_` or `()` segments
+    if (
+      segments.some((segment) =>
+        segment.startsWith('_') || segment.match(/\(.*\)/)
+      )
+    ) return
+
     // Initialize path in pathMap
     pathMap[normalizedPath] = 1
-
-    // If any segment contains `_`, mark path as 0 to exclude
-    if (segments.some((segment) => segment.startsWith('_'))) {
-      pathMap[normalizedPath] = 0
-    }
   }
 
   // Retrieve all paths recursively
@@ -134,16 +136,7 @@ async function generateSitemap(
 
   await addDirectory(distDirectory)
 
-  // Remove segments with `()` characters
-  for (const path in pathMap) {
-    if (pathMap[path] === 1) {
-      const cleanedPath = path.replace(/\(.*?\)/g, '')
-      pathMap[cleanedPath] = 1
-      delete pathMap[path]
-    }
-  }
-
-  // Remove `index` as a segment, but keep the path
+  // Remove `index` as the last segment only, but keep the path structure
   for (const path in pathMap) {
     if (pathMap[path] === 1) {
       const cleanedPath = path.replace(/\/index$/, '')
