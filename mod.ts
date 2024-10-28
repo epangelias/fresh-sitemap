@@ -90,7 +90,7 @@ export async function saveSitemapAndRobots(
 
 /**
  * Generates sitemap entries for static routes, excluding dynamic and grouping directories.
- * Ensures `_` and `()` directories and `index.tsx` files are excluded.
+ * Ensures `_` and `()` directories and `index.tsx` files are correctly processed.
  * @param basename - The base URL
  * @param distDirectory - Directory containing routes
  * @param options - Options for sitemap generation
@@ -143,12 +143,14 @@ async function generateSitemap(
     }
   }
 
-  // Remove `index` as the last segment
+  // Remove `index` as a segment, but keep the path
   for (const path in pathMap) {
-    if (pathMap[path] === 1 && path.endsWith('/index')) {
+    if (pathMap[path] === 1) {
       const cleanedPath = path.replace(/\/index$/, '')
-      pathMap[cleanedPath] = 1
-      delete pathMap[path]
+      if (cleanedPath !== path) {
+        pathMap[cleanedPath] = 1
+        delete pathMap[path]
+      }
     }
   }
 
