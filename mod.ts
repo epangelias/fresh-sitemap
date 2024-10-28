@@ -88,6 +88,13 @@ export async function saveSitemapAndRobots(
   await Deno.writeTextFile(robotsPath, robotsTxt)
 }
 
+/**
+ * Generates sitemap entries for static routes, excluding dynamic and grouping directories.
+ * @param basename - The base URL of the website (e.g., 'https://example.com')
+ * @param distDirectory - Directory containing route files
+ * @param options - Options for sitemap generation, including languages and default language
+ * @returns Array of sitemap entries
+ */
 async function generateSitemap(
   basename: string,
   distDirectory: string,
@@ -101,11 +108,17 @@ async function generateSitemap(
     // Skip non-.tsx files
     if (!path.endsWith('.tsx')) return
 
+    // Initialize path in the map with an inclusion flag
     pathMap[path] = 1
-    console.log(
-      `Path added to pathMap: ${path}, pathMap state:`,
-      pathMap,
-    )
+
+    // Exclude paths containing '_'
+    if (path.includes('_')) {
+      pathMap[path] = 0 // Set to 0 if the path contains '_'
+      console.log(`Excluded due to _: ${path}`)
+      return // Exit early if excluded
+    }
+
+    console.log(`Path added to pathMap: ${path}, pathMap state:`, pathMap)
   }
 
   // Recursively collect all paths in the directory
@@ -119,50 +132,43 @@ async function generateSitemap(
   await addDirectory(distDirectory)
   console.log('Initial pathMap after processing all segments:', pathMap)
 
-  // Remove `index` from the end of paths for cleaner URLs
-  for (const path in pathMap) {
-    if (pathMap[path] === 1 && path.endsWith('/index')) {
-      const cleanedPath = path.replace(/\/index$/, '')
-      pathMap[cleanedPath] = 1
-      delete pathMap[path]
-      console.log(
-        `Adjusted for index removal: ${cleanedPath}, pathMap state:`,
-        pathMap,
-      )
-    }
-  }
-  console.log('PathMap after index removal:', pathMap)
-
   // Populate sitemap entries based on pathMap
   for (const path in pathMap) {
     if (pathMap[path] === 1) {
-      const filePath = join(distDirectory, path + '.tsx')
+      const filePath = join(distDirectory, path) // Use original path for checking
       if (!(await exists(filePath))) {
         console.log(`File not found, skipping: ${filePath}`)
-        continue
+        continue // Skip if file does not exist
       }
       const { mtime } = await Deno.stat(filePath)
-      sitemapSet.add(
-        JSON.stringify({
-          loc: basename + path,
-          lastmod: (mtime ?? new Date()).toISOString(),
-        }),
-      )
 
-      options.languages?.forEach((lang) => {
-        if (lang !== options.defaultLanguage) {
-          sitemapSet.add(
-            JSON.stringify({
-              loc: `${basename}/${lang}${path}`,
-              lastmod: (mtime ?? new Date()).toISOString(),
-            }),
-          )
-        }
-      })
+      // Clean the path for the sitemap
+      const cleanedPath = path.replace(/\/index\.tsx$/, '') // Remove '/index.tsx'
+
+      // Add the cleaned path to the sitemap if valid
+      if (cleanedPath) {
+        sitemapSet.add(
+          JSON.stringify({
+            loc: basename + cleanedPath,
+            lastmod: (mtime ?? new Date()).toISOString(),
+          }),
+        )
+
+        // Handle language variations for the sitemap
+        options.languages?.forEach((lang) => {
+          if (lang !== options.defaultLanguage) {
+            sitemapSet.add(
+              JSON.stringify({
+                loc: `${basename}/${lang}${cleanedPath}`,
+                lastmod: (mtime ?? new Date()).toISOString(),
+              }),
+            )
+          }
+        })
+      }
     }
   }
 
-  console.log('Final pathMap:', pathMap)
   console.log('Final Sitemap Set:', sitemapSet)
 
   return Array.from(sitemapSet).map((entry) => JSON.parse(entry)) as Sitemap
