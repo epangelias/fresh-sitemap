@@ -90,7 +90,7 @@ export async function saveSitemapAndRobots(
 
 /**
  * Generates sitemap entries for static routes, excluding dynamic and grouping directories.
- * Ensures `_` and `()` directories and `index.tsx` files are correctly processed.
+ * Logs each processing step to help debug filtering issues.
  * @param basename - The base URL
  * @param distDirectory - Directory containing routes
  * @param options - Options for sitemap generation
@@ -104,9 +104,8 @@ async function generateSitemap(
   const sitemapSet = new Set<string>() // Collects unique paths
   const pathMap: Record<string, number> = {} // Records path flags
 
-  // Process each segment of the path
+  // Logs each path segment during processing
   function processPathSegments(path: string): void {
-    // Ignore non-.tsx files
     if (!path.endsWith('.tsx')) return
     const relPath = distDirectory === '.'
       ? path
@@ -121,13 +120,24 @@ async function generateSitemap(
       segments.some((segment) =>
         segment.startsWith('_') || segment.includes('(')
       )
-    ) return
+    ) {
+      pathMap[normalizedPath] = 0
+      console.log(
+        `Excluded by filter (_ or ()): ${normalizedPath}, pathMap state:`,
+        pathMap,
+      )
+      return
+    }
 
-    // Initialize path in pathMap
+    // Initialize path in pathMap and log it
     pathMap[normalizedPath] = 1
+    console.log(
+      `Path added to pathMap: ${normalizedPath}, pathMap state:`,
+      pathMap,
+    )
   }
 
-  // Retrieve all paths recursively
+  // Retrieves all paths and processes each segment
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
       processPathSegments(path)
@@ -136,44 +146,65 @@ async function generateSitemap(
 
   await addDirectory(distDirectory)
 
-  // Remove `index` as the last segment only, but keep the path structure
+  console.log('Initial pathMap after processing all segments:', pathMap)
+
+  // Remove `index` as the last segment and log any adjustments
   for (const path in pathMap) {
     if (pathMap[path] === 1) {
       const cleanedPath = path.replace(/\/index$/, '')
       if (cleanedPath !== path) {
         pathMap[cleanedPath] = 1
         delete pathMap[path]
+        console.log(
+          `Adjusted for index removal: ${cleanedPath}, pathMap state:`,
+          pathMap,
+        )
       }
     }
   }
 
-  // Add unique paths to the Sitemap array
+  console.log('PathMap after index removal:', pathMap)
+
+  // Add unique paths to the Sitemap array, logging each addition
   for (const path in pathMap) {
     if (pathMap[path] === 1) {
       const filePath = join(distDirectory, path)
-      if (!(await exists(filePath))) continue // Check if path exists
+      if (!(await exists(filePath))) {
+        console.log(`File not found, skipping: ${filePath}`)
+        continue
+      }
       const { mtime } = await Deno.stat(filePath)
-      sitemapSet.add(
-        JSON.stringify({
-          loc: basename + path,
-          lastmod: (mtime ?? new Date()).toISOString(),
-        }),
-      )
+      const sitemapEntry = JSON.stringify({
+        loc: basename + path,
+        lastmod: (mtime ?? new Date()).toISOString(),
+      })
+      sitemapSet.add(sitemapEntry)
+      console.log(`Added to sitemapSet: ${sitemapEntry}`)
 
       options.languages?.forEach((lang) => {
         if (lang !== options.defaultLanguage) {
-          sitemapSet.add(
-            JSON.stringify({
-              loc: `${basename}/${lang}${path}`,
-              lastmod: (mtime ?? new Date()).toISOString(),
-            }),
+          const langSitemapEntry = JSON.stringify({
+            loc: `${basename}/${lang}${path}`,
+            lastmod: (mtime ?? new Date()).toISOString(),
+          })
+          sitemapSet.add(langSitemapEntry)
+          console.log(
+            `Added to sitemapSet for language '${lang}': ${langSitemapEntry}`,
           )
         }
       })
     }
   }
 
-  return Array.from(sitemapSet).map((entry) => JSON.parse(entry)) as Sitemap
+  console.log('Final pathMap:', pathMap)
+  console.log('Final Sitemap Set:', Array.from(sitemapSet))
+
+  const sitemapArray = Array.from(sitemapSet).map((entry) =>
+    JSON.parse(entry)
+  ) as Sitemap
+  console.log('Final Sitemap Array:', sitemapArray)
+
+  return sitemapArray
 }
 
 /**
