@@ -91,7 +91,8 @@ export async function saveSitemapAndRobots(
 }
 
 /**
- * Generates sitemap entries for static routes, excluding dynamic and grouping directories.
+ * Generates sitemap entries for static routes, excluding unnecessary paths such as
+ * dynamic routes, private routes (e.g., _ files), and index files.
  * @param basename - The base URL
  * @param distDirectory - Directory containing routes
  * @param options - Options for sitemap generation
@@ -102,55 +103,73 @@ async function generateSitemap(
   distDirectory: string,
   options: SiteMapOptions,
 ): Promise<Sitemap> {
+  const sitemapSet = new Set<string>() // To store unique paths
   const sitemap: Sitemap = []
-  const include = options.include && globToRegExp(options.include)
-  const exclude = options.exclude && globToRegExp(options.exclude)
+  const include = options.include ? globToRegExp(options.include) : null
+  const exclude = options.exclude ? globToRegExp(options.exclude) : null
 
+  // Helper function to process and clean each path
+  function processPath(relPath: string): string | null {
+    const segments = relPath
+      .split(SEPARATOR)
+      .filter((segment) =>
+        !segment.startsWith('_') && // Exclude private routes
+        !segment.startsWith('(') && // Exclude grouping directories
+        segment !== 'index' // Exclude 'index' files
+      )
+    if (segments.length === 0) return null
+
+    let pathname = normalize(`/${segments.join('/')}`)
+    pathname = pathname.replace(/\.tsx$/, '') // Remove .tsx extension
+
+    // Check include/exclude patterns only if they are RegExp instances
+    if (
+      (exclude instanceof RegExp && exclude.test(pathname)) ||
+      (include instanceof RegExp && !include.test(pathname))
+    ) {
+      return null
+    }
+    return pathname
+  }
+
+  // Collect and process paths
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
       const relPath = distDirectory === '.'
         ? path
         : path.substring(distDirectory.length)
-      const segments = normalize(`/${relPath}`).split(SEPARATOR)
-
-      // Filter out unwanted segments at this level
-      const filteredSegments = segments.filter((segment) => {
-        return !(
-          segment.startsWith('_') || // Exclude segments starting with '_'
-          segment === 'index' || // Exclude 'index' segments
-          segment.match(/\(.*?\)/) // Exclude segments like '(default)'
-        )
-      })
-
-      if (filteredSegments.length === 0) continue // Skip if no valid segments remain
-
-      // Construct valid pathname
-      const pathname = `/${filteredSegments.join('/')}`
-
-      // Apply include/exclude filters if specified
-      const isExcluded = exclude && exclude.test(pathname.substring(1))
-      const isIncluded = !include || include.test(pathname.substring(1))
-      if (isExcluded || !isIncluded) continue
+      const pathname = processPath(relPath)
+      if (!pathname) continue // Skip if pathname is null or filtered
 
       const { mtime } = await Deno.stat(path)
-      sitemap.push({
-        loc: `${basename.replace(/\/+$/, '')}${pathname}`,
-        lastmod: (mtime ?? new Date()).toISOString(),
-      })
+      sitemapSet.add(
+        JSON.stringify({
+          loc: basename + pathname,
+          lastmod: (mtime ?? new Date()).toISOString(),
+        }),
+      )
 
-      // Add paths for each specified language, if applicable
+      // Add localized paths if languages are specified
       options.languages?.forEach((lang) => {
         if (lang !== options.defaultLanguage) {
-          sitemap.push({
-            loc: `${basename}/${lang}${pathname}`,
-            lastmod: (mtime ?? new Date()).toISOString(),
-          })
+          sitemapSet.add(
+            JSON.stringify({
+              loc: `${basename}/${lang}${pathname}`,
+              lastmod: (mtime ?? new Date()).toISOString(),
+            }),
+          )
         }
       })
     }
   }
 
   await addDirectory(distDirectory)
+
+  // Convert set entries to the sitemap array
+  for (const entry of sitemapSet) {
+    sitemap.push(JSON.parse(entry))
+  }
+
   return sitemap
 }
 
