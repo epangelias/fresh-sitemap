@@ -146,6 +146,12 @@ async function generateSitemap(
       if (key.startsWith('(') && key.endsWith(')')) {
         pathMap[key] = 0
       }
+      if (key === 'routes') {
+        pathMap[key] = 0
+      }
+      if (key === 'index.tsx') {
+        pathMap[key] = 0
+      }
     }
     return pathMap
   }
