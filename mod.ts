@@ -179,7 +179,9 @@ async function generateSitemap(
 
       console.log('Needed segments path:', neededSegmentsPath)
 
-      const cleanedPath = neededSegmentsPath.replace(/\/index\.tsx$/, '')
+      const cleanedPath = neededSegmentsPath.replace(/\index\.tsx$/, '')
+
+      console.log('Cleaned path:', cleanedPath)
 
       // Add the cleaned path to the sitemap if valid
       if (cleanedPath) {
