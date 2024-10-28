@@ -119,7 +119,7 @@ async function generateSitemap(
     // Ignore paths with `_` or `()` segments
     if (
       segments.some((segment) =>
-        segment.startsWith('_') || segment.match(/\(.*\)/)
+        segment.startsWith('_') || segment.includes('(')
       )
     ) return
 
