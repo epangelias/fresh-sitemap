@@ -149,9 +149,6 @@ async function generateSitemap(
       if (key === 'routes') {
         pathMap[key] = 0
       }
-      if (key === 'index.tsx') {
-        pathMap[key] = 0
-      }
     }
     return pathMap
   }
@@ -176,9 +173,11 @@ async function generateSitemap(
 
       const checkedSegments = checkSegments(segCheckObj)
 
-      const cleanedPath = pathSegments
+      const neededSegmentsPath = pathSegments
         .filter((segment) => checkedSegments[segment] === 1)
         .join('/')
+
+      const cleanedPath = neededSegmentsPath.replace(/\/index\.tsx$/, '')
 
       // Add the cleaned path to the sitemap if valid
       if (cleanedPath) {
