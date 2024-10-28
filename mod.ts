@@ -129,13 +129,34 @@ async function generateSitemap(
     }
   }
 
+  function arrayToObject(arr: string[]): Record<string, number> {
+    const result: Record<string, number> = {}
+
+    for (const segment of arr) {
+      result[segment] = 1 // Set each segment as a key with value 1
+    }
+
+    return result
+  }
+
+  function checkSegments(
+    pathMap: Record<string, number>,
+  ): Record<string, number> {
+    for (const key in pathMap) {
+      if (key.startsWith('(') && key.endsWith(')')) {
+        pathMap[key] = 0
+      }
+    }
+    return pathMap
+  }
+
   await addDirectory(distDirectory)
   console.log('Initial pathMap after processing all segments:', pathMap)
 
   // Populate sitemap entries based on pathMap
   for (const path in pathMap) {
     if (pathMap[path] === 1) {
-      const filePath = join(distDirectory, path) // Use original path for checking
+      const filePath = join(path) // Use original path for checking
       if (!(await exists(filePath))) {
         console.log(`File not found, skipping: ${filePath}`)
         continue // Skip if file does not exist
@@ -143,7 +164,15 @@ async function generateSitemap(
       const { mtime } = await Deno.stat(filePath)
 
       // Clean the path for the sitemap
-      const cleanedPath = path.replace(/\/index\.tsx$/, '') // Remove '/index.tsx'
+      const pathSegments = path.split(SEPARATOR)
+
+      const segCheckObj = arrayToObject(pathSegments)
+
+      const checkedSegments = checkSegments(segCheckObj)
+
+      const cleanedPath = pathSegments
+        .filter((segment) => checkedSegments[segment] === 1)
+        .join('/')
 
       // Add the cleaned path to the sitemap if valid
       if (cleanedPath) {
