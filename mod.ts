@@ -100,18 +100,10 @@ async function generateSitemap(
   function processPathSegments(path: string): void {
     // Skip non-.tsx files
     if (!path.endsWith('.tsx')) return
-    const relPath = distDirectory === '.'
-      ? path
-      : path.substring(distDirectory.length)
 
-    // Split segments and check if any segment should exclude this path
-    const segments = relPath.split(SEPARATOR)
-
-    // Construct normalized path and mark it for inclusion
-    const normalizedPath = `/${segments.join('/')}`.replace(/\.tsx$/, '')
-    pathMap[normalizedPath] = 1
+    pathMap[path] = 1
     console.log(
-      `Path added to pathMap: ${normalizedPath}, pathMap state:`,
+      `Path added to pathMap: ${path}, pathMap state:`,
       pathMap,
     )
   }
@@ -119,6 +111,7 @@ async function generateSitemap(
   // Recursively collect all paths in the directory
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
+      console.log('Processing path:', path)
       processPathSegments(path)
     }
   }
