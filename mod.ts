@@ -103,9 +103,6 @@ async function generateSitemap(
   const sitemapSet = new Set<string>() // Unique paths for the final sitemap
   const pathMap: Record<string, number> = {} // Store paths with a flag (1 for include, 0 for exclude)
 
-  function removeLocaleFromPath(path: string): string {
-    return path.replace('/[locale]/', '/')
-  }
   // Process each path segment without modifying it
   function processPathSegments(path: string): void {
     // Skip non-.tsx files
@@ -119,11 +116,7 @@ async function generateSitemap(
       pathMap[path] = 0 // Set to 0 if the path contains '_'
       return // Exit early if excluded
     }
-    if (path.includes('[')) {
-      pathMap[path] = 0 // Set to 0 if the path contains '_'
-      return // Exit early if excluded
-    }
-    if (path.includes(']')) {
+    if (path.includes('[...slug]')) {
       pathMap[path] = 0 // Set to 0 if the path contains '_'
       return // Exit early if excluded
     }
@@ -132,9 +125,7 @@ async function generateSitemap(
   // Recursively collect all paths in the directory
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
-      const removedLocalePath = removeLocaleFromPath(path)
-      console.log('Removed Locale Path:', removedLocalePath)
-      processPathSegments(removedLocalePath)
+      processPathSegments(path)
     }
   }
 
@@ -153,6 +144,9 @@ async function generateSitemap(
   ): Record<string, number> {
     for (const key in pathMap) {
       if (key.startsWith('(') && key.endsWith(')')) {
+        pathMap[key] = 0
+      }
+      if (key.startsWith('[') && key.endsWith(']')) {
         pathMap[key] = 0
       }
       if (key === 'routes') {
