@@ -1,15 +1,28 @@
 import { join, SEPARATOR } from 'jsr:@std/path@0.224.0'
 import { ensureFile, exists } from 'jsr:@std/fs@0.224.0'
 
+/**
+ * Represents a single entry in the sitemap with a location and last modified date.
+ */
 export interface SiteMapEntry {
+  /** The location (URL) of the sitemap entry */
   loc: string
+  /** The last modified date for the sitemap entry in ISO string format */
   lastmod: string
 }
 
+/**
+ * A list of sitemap entries.
+ */
 export type Sitemap = SiteMapEntry[]
 
+/**
+ * Options for configuring sitemap generation, including languages and default language.
+ */
 export interface SiteMapOptions {
+  /** Array of languages supported for the sitemap entries */
   languages?: string[]
+  /** The default language for the sitemap if no specific language is specified */
   defaultLanguage?: string
 }
 
@@ -141,7 +154,6 @@ async function generateSitemap(
   const sitemapSet = new Set<string>()
   const pathMap: Record<string, number> = {}
 
-  // Processes each path segment without modification
   function processPathSegments(path: string): void {
     if (!path.endsWith('.tsx')) return
 
