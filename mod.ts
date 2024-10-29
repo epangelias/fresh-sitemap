@@ -245,7 +245,7 @@ async function generateArticlesSitemap(
       /\.md$/,
       '',
     )
-    const removedLocaleSegments = relPath.split(SEPARATOR).splice(2, 1)
+    const removedLocaleSegments = relPath.split(SEPARATOR)
     console.log(removedLocaleSegments)
     const articleType = removedLocaleSegments[1]
     const articleRoute = await findFolderPathRecursively(
