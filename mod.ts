@@ -88,6 +88,33 @@ export async function saveSitemapAndRobots(
   await Deno.writeTextFile(robotsPath, robotsTxt)
 }
 
+function arrayToObject(arr: string[]): Record<string, number> {
+  const result: Record<string, number> = {}
+
+  for (const segment of arr) {
+    result[segment] = 1 // Set each segment as a key with value 1
+  }
+
+  return result
+}
+
+function checkSegments(
+  pathMap: Record<string, number>,
+): Record<string, number> {
+  for (const key in pathMap) {
+    if (key.startsWith('(') && key.endsWith(')')) {
+      pathMap[key] = 0
+    }
+    if (key.startsWith('[') && key.endsWith(']')) {
+      pathMap[key] = 0
+    }
+    if (key === 'routes') {
+      pathMap[key] = 0
+    }
+  }
+  return pathMap
+}
+
 /**
  * Generates sitemap entries for static routes, excluding dynamic and grouping directories.
  * @param basename - The base URL of the website (e.g., 'https://example.com')
@@ -127,33 +154,6 @@ async function generateSitemap(
     for await (const path of stableRecurseFiles(directory)) {
       processPathSegments(path)
     }
-  }
-
-  function arrayToObject(arr: string[]): Record<string, number> {
-    const result: Record<string, number> = {}
-
-    for (const segment of arr) {
-      result[segment] = 1 // Set each segment as a key with value 1
-    }
-
-    return result
-  }
-
-  function checkSegments(
-    pathMap: Record<string, number>,
-  ): Record<string, number> {
-    for (const key in pathMap) {
-      if (key.startsWith('(') && key.endsWith(')')) {
-        pathMap[key] = 0
-      }
-      if (key.startsWith('[') && key.endsWith(']')) {
-        pathMap[key] = 0
-      }
-      if (key === 'routes') {
-        pathMap[key] = 0
-      }
-    }
-    return pathMap
   }
 
   await addDirectory(distDirectory)
@@ -196,6 +196,34 @@ async function generateSitemap(
 }
 
 /**
+ * Recursively searches for a folder with a specific name within a given directory or its subdirectories.
+ * @param baseDirectory - The directory to start searching within
+ * @param targetFolderName - The name of the folder to search for
+ * @returns The path to the folder if it exists in any subdirectory, otherwise null
+ */
+async function findFolderPathRecursively(
+  baseDirectory: string,
+  targetFolderName: string,
+): Promise<string | null> {
+  for await (const entry of Deno.readDir(baseDirectory)) {
+    const entryPath = `${baseDirectory}/${entry.name}`
+
+    if (entry.isDirectory) {
+      if (entry.name === targetFolderName) {
+        return entryPath
+      } else {
+        const foundInSubDir = await findFolderPathRecursively(
+          entryPath,
+          targetFolderName,
+        )
+        if (foundInSubDir) return foundInSubDir
+      }
+    }
+  }
+  return null
+}
+
+/**
  * Generates sitemap entries for markdown articles, respecting language settings.
  * @param basename - The base URL
  * @param articlesDirectory - Directory containing article markdown files
@@ -217,10 +245,28 @@ async function generateArticlesSitemap(
       /\.md$/,
       '',
     )
-    const segments = relPath.split(SEPARATOR).map((segment) =>
-      segment.replace(/^en\//, '')
+    const removedLocaleSegments = relPath.split(SEPARATOR).splice(2, 1)
+    console.log(removedLocaleSegments)
+    const articleType = removedLocaleSegments[1]
+    const articleRoute = await findFolderPathRecursively(
+      articleType,
+      articlesDirectory,
     )
-    const pathname = normalize(`/${segments.join('/')}`).replace(/\/index$/, '')
+    if (!articleRoute) return
+
+    const routeSegments = articleRoute.split(SEPARATOR)
+
+    const segCheckObj = arrayToObject(routeSegments)
+
+    const checkedSegments = checkSegments(segCheckObj)
+
+    const neededSegmentsPath = routeSegments
+      .filter((segment) => checkedSegments[segment] === 1)
+      .join('/')
+
+    const pathname = neededSegmentsPath
+
+    console.log(pathname)
 
     const urlPaths = languages.length > 0
       ? languages.map((
