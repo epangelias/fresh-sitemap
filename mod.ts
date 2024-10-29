@@ -245,16 +245,17 @@ async function generateArticlesSitemap(
       /\.md$/,
       '',
     )
-    const removedLocaleSegments = relPath.split(SEPARATOR)
-    console.log(removedLocaleSegments)
-    const articleType = removedLocaleSegments[1]
+    const segments = relPath.split(SEPARATOR)
+    const articleType = segments[1]
     const articleRoute = await findFolderPathRecursively(
-      articlesDirectory,
+      './routes',
       articleType,
     )
     if (!articleRoute) return
 
-    const routeSegments = articleRoute.split(SEPARATOR)
+    const routeSegments = articleRoute.replace('./routes', '').split(
+      SEPARATOR,
+    )
 
     const segCheckObj = arrayToObject(routeSegments)
 
@@ -264,7 +265,8 @@ async function generateArticlesSitemap(
       .filter((segment) => checkedSegments[segment] === 1)
       .join('/')
 
-    const pathname = neededSegmentsPath
+    const slugSegmentsPath = segments.slice(3).join('/')
+    const pathname = neededSegmentsPath + '/' + slugSegmentsPath
 
     console.log(pathname)
 
