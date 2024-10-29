@@ -249,8 +249,8 @@ async function generateArticlesSitemap(
     console.log(removedLocaleSegments)
     const articleType = removedLocaleSegments[1]
     const articleRoute = await findFolderPathRecursively(
-      articleType,
       articlesDirectory,
+      articleType,
     )
     if (!articleRoute) return
 
