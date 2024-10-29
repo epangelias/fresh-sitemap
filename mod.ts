@@ -241,7 +241,7 @@ async function generateArticlesSitemap(
   if (!(await exists(articlesDirectory))) return sitemap
 
   async function addMarkdownFile(path: string) {
-    const relPath = path.substring(articlesDirectory.length).replace(
+    const relPath = path.replace(
       /\.md$/,
       '',
     )
