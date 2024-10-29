@@ -1,7 +1,7 @@
 {
   "name": "@elsoul/fresh-sitemap",
-  "version": "1.0.3",
-  "description": "Lightweight global state management library for Fresh framework using Preact signals.",
+  "version": "1.0.4",
+  "description": "This plugin generates a sitemap for a Deno Fresh v2 project.",
   "runtimes": ["deno", "browser"],
   "exports": "./mod.ts",
   "tasks": {

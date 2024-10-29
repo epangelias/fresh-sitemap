@@ -133,6 +133,7 @@ async function generateSitemap(
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
       const removedLocalePath = removeLocaleFromPath(path)
+      console.log('Removed Locale Path:', removedLocalePath)
       processPathSegments(removedLocalePath)
     }
   }
