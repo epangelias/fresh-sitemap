@@ -181,27 +181,16 @@ async function generateSitemap(
       const cleanedPath = neededSegmentsPath.replace(/\.tsx$/, '')
         .replace(/\index$/, '')
 
-      sitemapSet.add(
-        JSON.stringify({
-          loc: basename + '/' + cleanedPath,
-          lastmod: (mtime ?? new Date()).toISOString(),
-        }),
-      )
-
       options.languages?.forEach((lang) => {
-        if (lang !== options.defaultLanguage) {
-          sitemapSet.add(
-            JSON.stringify({
-              loc: `${basename}/${lang}${cleanedPath}`,
-              lastmod: (mtime ?? new Date()).toISOString(),
-            }),
-          )
-        }
+        sitemapSet.add(
+          JSON.stringify({
+            loc: `${basename}/${lang}${cleanedPath}`,
+            lastmod: (mtime ?? new Date()).toISOString(),
+          }),
+        )
       })
     }
   }
-
-  console.log('Final Sitemap Set:', sitemapSet)
 
   return Array.from(sitemapSet).map((entry) => JSON.parse(entry)) as Sitemap
 }
@@ -236,10 +225,7 @@ async function generateArticlesSitemap(
     const urlPaths = languages.length > 0
       ? languages.map((
         lang,
-      ) => (lang === options.defaultLanguage
-        ? pathname
-        : `/${lang}${pathname}`)
-      )
+      ) => `/${lang}${pathname}`)
       : [pathname]
 
     for (const urlPath of urlPaths) {
