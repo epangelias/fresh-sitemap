@@ -1,4 +1,4 @@
-import { join, normalize, SEPARATOR } from 'jsr:@std/path@0.224.0'
+import { join, SEPARATOR } from 'jsr:@std/path@0.224.0'
 import { ensureFile, exists } from 'jsr:@std/fs@0.224.0'
 
 export interface SiteMapEntry {
@@ -14,12 +14,12 @@ export interface SiteMapOptions {
 }
 
 /**
- * Generates a sitemap XML for given directories and base URL.
+ * Generates a sitemap XML string from specified directories and a base URL.
  * @param basename - The base URL of the website (e.g., 'https://example.com')
  * @param distDirectory - The directory containing route files
  * @param articlesDirectory - The directory containing articles in markdown format
- * @param options - Options for sitemap generation
- * @returns Generated sitemap as an XML string
+ * @param options - Options for sitemap generation, including languages and default language
+ * @returns The generated sitemap as an XML string
  */
 export async function generateSitemapXML(
   basename: string,
@@ -38,9 +38,9 @@ export async function generateSitemapXML(
 }
 
 /**
- * Generates the robots.txt file content.
+ * Generates content for the robots.txt file, including site and sitemap details.
  * @param domain - The domain of the website (e.g., 'example.com')
- * @returns Generated robots.txt content
+ * @returns The generated robots.txt file content
  */
 function generateRobotsTxt(domain: string): string {
   return `# *
@@ -56,13 +56,13 @@ Sitemap: https://${domain}/sitemap.xml
 }
 
 /**
- * Saves the generated sitemap XML and robots.txt to the specified file paths.
+ * Saves the generated sitemap XML and robots.txt files to specified file paths.
  * @param basename - The base URL of the website
- * @param distDirectory - Directory containing route files
- * @param articlesDirectory - Directory containing articles
+ * @param distDirectory - The directory containing route files
+ * @param articlesDirectory - The directory containing articles
  * @param sitemapPath - Path where sitemap.xml will be saved
  * @param robotsPath - Path where robots.txt will be saved
- * @param options - Options for sitemap generation
+ * @param options - Options for sitemap generation, including languages and default language
  */
 export async function saveSitemapAndRobots(
   basename: string,
@@ -88,16 +88,27 @@ export async function saveSitemapAndRobots(
   await Deno.writeTextFile(robotsPath, robotsTxt)
 }
 
+/**
+ * Converts an array of strings to an object where each string becomes a key with a default value of 1.
+ * @param arr - Array of strings
+ * @returns Object with each string in arr as a key set to 1
+ */
 function arrayToObject(arr: string[]): Record<string, number> {
   const result: Record<string, number> = {}
 
   for (const segment of arr) {
-    result[segment] = 1 // Set each segment as a key with value 1
+    result[segment] = 1
   }
 
   return result
 }
 
+/**
+ * Filters path segments based on specific criteria for sitemap inclusion.
+ * Sets the value to 0 for paths containing grouping indicators like parentheses or square brackets.
+ * @param pathMap - Object containing path segments with inclusion flags
+ * @returns Filtered pathMap with updated inclusion flags
+ */
 function checkSegments(
   pathMap: Record<string, number>,
 ): Record<string, number> {
@@ -127,29 +138,25 @@ async function generateSitemap(
   distDirectory: string,
   options: SiteMapOptions,
 ): Promise<Sitemap> {
-  const sitemapSet = new Set<string>() // Unique paths for the final sitemap
-  const pathMap: Record<string, number> = {} // Store paths with a flag (1 for include, 0 for exclude)
+  const sitemapSet = new Set<string>()
+  const pathMap: Record<string, number> = {}
 
-  // Process each path segment without modifying it
+  // Processes each path segment without modification
   function processPathSegments(path: string): void {
-    // Skip non-.tsx files
     if (!path.endsWith('.tsx')) return
 
-    // Initialize path in the map with an inclusion flag
     pathMap[path] = 1
 
-    // Exclude paths containing '_'
     if (path.includes('_')) {
-      pathMap[path] = 0 // Set to 0 if the path contains '_'
-      return // Exit early if excluded
+      pathMap[path] = 0
+      return
     }
     if (path.includes('[...slug]')) {
-      pathMap[path] = 0 // Set to 0 if the path contains '_'
-      return // Exit early if excluded
+      pathMap[path] = 0
+      return
     }
   }
 
-  // Recursively collect all paths in the directory
   async function addDirectory(directory: string) {
     for await (const path of stableRecurseFiles(directory)) {
       processPathSegments(path)
@@ -158,28 +165,27 @@ async function generateSitemap(
 
   await addDirectory(distDirectory)
 
-  // Populate sitemap entries based on pathMap
   for (const path in pathMap) {
     if (pathMap[path] === 1) {
-      const filePath = join(path) // Use original path for checking
+      const filePath = join(path)
       if (!(await exists(filePath))) {
-        continue // Skip if file does not exist
+        continue
       }
       const { mtime } = await Deno.stat(filePath)
 
-      // Clean the path for the sitemap
       const pathSegments = path.split(SEPARATOR)
 
       const segCheckObj = arrayToObject(pathSegments)
-
       const checkedSegments = checkSegments(segCheckObj)
 
       const neededSegmentsPath = pathSegments
         .filter((segment) => checkedSegments[segment] === 1)
         .join('/')
 
-      const cleanedPath = neededSegmentsPath.replace(/\.tsx$/, '')
-        .replace(/\index$/, '')
+      const cleanedPath = neededSegmentsPath.replace(/\.tsx$/, '').replace(
+        /\index$/,
+        '',
+      )
 
       options.languages?.forEach((lang) => {
         sitemapSet.add(
@@ -241,10 +247,7 @@ async function generateArticlesSitemap(
   if (!(await exists(articlesDirectory))) return sitemap
 
   async function addMarkdownFile(path: string) {
-    const relPath = path.replace(
-      /\.md$/,
-      '',
-    )
+    const relPath = path.replace(/\.md$/, '')
     const segments = relPath.split(SEPARATOR)
     const articleType = segments[1]
     const articleRoute = await findFolderPathRecursively(
@@ -258,7 +261,6 @@ async function generateArticlesSitemap(
     )
 
     const segCheckObj = arrayToObject(routeSegments)
-
     const checkedSegments = checkSegments(segCheckObj)
 
     const neededSegmentsPath = routeSegments
@@ -268,12 +270,8 @@ async function generateArticlesSitemap(
     const slugSegmentsPath = segments.slice(3).join('/')
     const pathname = neededSegmentsPath + '/' + slugSegmentsPath
 
-    console.log(pathname)
-
     const urlPaths = languages.length > 0
-      ? languages.map((
-        lang,
-      ) => `/${lang}${pathname}`)
+      ? languages.map((lang) => `/${lang}${pathname}`)
       : [pathname]
 
     for (const urlPath of urlPaths) {
