@@ -1,4 +1,4 @@
-import { globToRegExp, join, normalize, SEPARATOR } from 'jsr:@std/path@0.224.0'
+import { join, SEPARATOR } from 'jsr:@std/path@0.224.0'
 import { ensureFile, exists } from 'jsr:@std/fs@0.224.0'
 
 export interface SiteMapEntry {
@@ -9,28 +9,24 @@ export interface SiteMapEntry {
 export type Sitemap = SiteMapEntry[]
 
 export interface SiteMapOptions {
-  languages?: string[]
-  defaultLanguage?: string
+  languages: string[]
+  defaultLanguage: string
 }
 
 /**
  * Generates a sitemap XML for given directories and base URL.
- * @param basename - The base URL of the website (e.g., 'https://example.com')
- * @param distDirectory - The directory containing route files
- * @param articlesDirectory - The directory containing articles in markdown format
- * @param options - Options for sitemap generation
- * @returns Generated sitemap as an XML string
  */
 export async function generateSitemapXML(
   basename: string,
   distDirectory: string,
   articlesDirectory: string,
-  options: SiteMapOptions = {},
+  options: SiteMapOptions,
 ): Promise<string> {
   const routesSitemap = await generateSitemap(basename, distDirectory, options)
   const articlesSitemap = await generateArticlesSitemap(
     basename,
     articlesDirectory,
+    distDirectory,
     options,
   )
   const sitemap = [...routesSitemap, ...articlesSitemap]
@@ -39,8 +35,6 @@ export async function generateSitemapXML(
 
 /**
  * Generates the robots.txt file content.
- * @param domain - The domain of the website (e.g., 'example.com')
- * @returns Generated robots.txt content
  */
 function generateRobotsTxt(domain: string): string {
   return `# *
@@ -50,19 +44,13 @@ Allow: /
 # Host
 Host: https://${domain}
 
-# Sitemaps
+/* Sitemaps */
 Sitemap: https://${domain}/sitemap.xml
 `
 }
 
 /**
  * Saves the generated sitemap XML and robots.txt to the specified file paths.
- * @param basename - The base URL of the website
- * @param distDirectory - Directory containing route files
- * @param articlesDirectory - Directory containing articles
- * @param sitemapPath - Path where sitemap.xml will be saved
- * @param robotsPath - Path where robots.txt will be saved
- * @param options - Options for sitemap generation
  */
 export async function saveSitemapAndRobots(
   basename: string,
@@ -70,7 +58,7 @@ export async function saveSitemapAndRobots(
   articlesDirectory: string,
   sitemapPath: string,
   robotsPath: string,
-  options: SiteMapOptions = {},
+  options: SiteMapOptions,
 ): Promise<void> {
   const domain = new URL(basename).hostname
   const sitemapXML = await generateSitemapXML(
@@ -89,11 +77,7 @@ export async function saveSitemapAndRobots(
 }
 
 /**
- * Generates sitemap entries for static routes, excluding dynamic and grouping directories.
- * @param basename - The base URL of the website (e.g., 'https://example.com')
- * @param distDirectory - Directory containing route files
- * @param options - Options for sitemap generation, including languages and default language
- * @returns Array of sitemap entries
+ * Generates sitemap entries for static routes, including the mandatory [locale] directory.
  */
 async function generateSitemap(
   basename: string,
@@ -101,153 +85,142 @@ async function generateSitemap(
   options: SiteMapOptions,
 ): Promise<Sitemap> {
   const sitemapSet = new Set<string>() // Unique paths for the final sitemap
-  const pathMap: Record<string, number> = {} // Store paths with a flag (1 for include, 0 for exclude)
-
-  // Process each path segment without modifying it
-  function processPathSegments(path: string): void {
-    // Skip non-.tsx files
-    if (!path.endsWith('.tsx')) return
-
-    // Initialize path in the map with an inclusion flag
-    pathMap[path] = 1
-
-    // Exclude paths containing '_'
-    if (path.includes('_')) {
-      pathMap[path] = 0 // Set to 0 if the path contains '_'
-      return // Exit early if excluded
-    }
-    if (path.includes('[')) {
-      pathMap[path] = 0 // Set to 0 if the path contains '_'
-      return // Exit early if excluded
-    }
-    if (path.includes(']')) {
-      pathMap[path] = 0 // Set to 0 if the path contains '_'
-      return // Exit early if excluded
-    }
-  }
 
   // Recursively collect all paths in the directory
-  async function addDirectory(directory: string) {
-    for await (const path of stableRecurseFiles(directory)) {
-      processPathSegments(path)
-    }
-  }
-
-  function arrayToObject(arr: string[]): Record<string, number> {
-    const result: Record<string, number> = {}
-
-    for (const segment of arr) {
-      result[segment] = 1 // Set each segment as a key with value 1
-    }
-
-    return result
-  }
-
-  function checkSegments(
-    pathMap: Record<string, number>,
-  ): Record<string, number> {
-    for (const key in pathMap) {
-      if (key.startsWith('(') && key.endsWith(')')) {
-        pathMap[key] = 0
-      }
-      if (key === 'routes') {
-        pathMap[key] = 0
-      }
-    }
-    return pathMap
-  }
-
-  await addDirectory(distDirectory)
-
-  // Populate sitemap entries based on pathMap
-  for (const path in pathMap) {
-    if (pathMap[path] === 1) {
-      const filePath = join(path) // Use original path for checking
-      if (!(await exists(filePath))) {
-        continue // Skip if file does not exist
-      }
-      const { mtime } = await Deno.stat(filePath)
-
-      // Clean the path for the sitemap
-      const pathSegments = path.split(SEPARATOR)
-
-      const segCheckObj = arrayToObject(pathSegments)
-
-      const checkedSegments = checkSegments(segCheckObj)
-
-      const neededSegmentsPath = pathSegments
-        .filter((segment) => checkedSegments[segment] === 1)
-        .join('/')
-
-      const cleanedPath = neededSegmentsPath.replace(/\.tsx$/, '')
-        .replace(/\index$/, '')
-
-      sitemapSet.add(
-        JSON.stringify({
-          loc: basename + '/' + cleanedPath,
-          lastmod: (mtime ?? new Date()).toISOString(),
-        }),
-      )
-
-      options.languages?.forEach((lang) => {
-        if (lang !== options.defaultLanguage) {
-          sitemapSet.add(
-            JSON.stringify({
-              loc: `${basename}/${lang}${cleanedPath}`,
-              lastmod: (mtime ?? new Date()).toISOString(),
-            }),
-          )
+  async function collectPaths(directory: string): Promise<void> {
+    for await (const entry of Deno.readDir(directory)) {
+      const entryPath = join(directory, entry.name)
+      if (entry.isDirectory) {
+        if (entry.name === '[locale]') {
+          // Process each language directory within [locale]
+          await processLocaleDirectory(entryPath)
+        } else {
+          await collectPaths(entryPath)
         }
-      })
+      }
     }
   }
 
-  console.log('Final Sitemap Set:', sitemapSet)
+  // Process each language directory inside [locale]
+  async function processLocaleDirectory(directory: string): Promise<void> {
+    for await (const entry of Deno.readDir(directory)) {
+      if (entry.isDirectory) {
+        const lang = entry.name
+        if (options.languages.includes(lang)) {
+          await processLanguageRoutes(join(directory, lang), lang)
+        }
+      }
+    }
+  }
+
+  // Process routes within a specific language directory
+  async function processLanguageRoutes(
+    directory: string,
+    lang: string,
+  ): Promise<void> {
+    for await (const entry of Deno.readDir(directory)) {
+      const entryPath = join(directory, entry.name)
+      if (entry.isFile && entry.name.endsWith('.tsx')) {
+        await processFile(entryPath, lang)
+      } else if (entry.isDirectory) {
+        await processLanguageRoutes(entryPath, lang)
+      }
+    }
+  }
+
+  // Process each .tsx file
+  async function processFile(filePath: string, lang: string): Promise<void> {
+    const relativePath = filePath.substring(distDirectory.length)
+    const pathSegments = relativePath.split(SEPARATOR).filter(Boolean)
+
+    // Exclude files starting with '_'
+    if (pathSegments.some((segment) => segment.startsWith('_'))) {
+      return
+    }
+
+    // Exclude dynamic routes (those with square brackets)
+    if (
+      pathSegments.some((segment) =>
+        segment.includes('[') || segment.includes(']')
+      )
+    ) {
+      return
+    }
+
+    const mtime = (await Deno.stat(filePath)).mtime ?? new Date()
+
+    // Remove [locale] and language from path segments
+    const urlSegments = pathSegments.slice(2)
+
+    let urlPath = urlSegments.join('/')
+
+    // Remove 'index' from the path
+    urlPath = urlPath.replace(/index\.tsx$/, '')
+    urlPath = urlPath.replace(/\.tsx$/, '')
+
+    // Ensure the URL starts with '/'
+    urlPath = '/' + urlPath
+
+    // Remove any trailing slashes
+    urlPath = urlPath.replace(/\/$/, '')
+
+    // Build the full URL with language prefix
+    const loc = basename.replace(/\/+$/, '') + `/${lang}` + urlPath
+
+    // Add to the sitemap set
+    sitemapSet.add(
+      JSON.stringify({
+        loc: loc,
+        lastmod: mtime.toISOString(),
+      }),
+    )
+  }
+
+  await collectPaths(distDirectory)
 
   return Array.from(sitemapSet).map((entry) => JSON.parse(entry)) as Sitemap
 }
 
 /**
- * Generates sitemap entries for markdown articles, respecting language settings.
- * @param basename - The base URL
- * @param articlesDirectory - Directory containing article markdown files
- * @param options - Options for sitemap generation, including languages
- * @returns Array of sitemap entries for articles
+ * Generates sitemap entries for markdown articles, mapping to /[locale]/[...slug] routes.
  */
 async function generateArticlesSitemap(
   basename: string,
   articlesDirectory: string,
+  distDirectory: string,
   options: SiteMapOptions,
 ): Promise<Sitemap> {
   const sitemap: Sitemap = []
-  const languages = options.languages || []
 
   if (!(await exists(articlesDirectory))) return sitemap
 
+  // Check if there is a dynamic route that can handle the articles
+  const dynamicRoutePath = findDynamicRoute(distDirectory)
+
+  if (!dynamicRoutePath) {
+    console.warn('Dynamic route for articles not found.')
+    return sitemap
+  }
+
+  // Function to process each markdown file
   async function addMarkdownFile(path: string) {
     const relPath = path.substring(articlesDirectory.length).replace(
       /\.md$/,
       '',
     )
-    const segments = relPath.split(SEPARATOR).map((segment) =>
-      segment.replace(/^en\//, '')
-    )
-    const pathname = normalize(`/${segments.join('/')}`).replace(/\/index$/, '')
+    const segments = relPath.split(SEPARATOR).filter(Boolean)
+    const slug = segments.join('/')
 
-    const urlPaths = languages.length > 0
-      ? languages.map((
-        lang,
-      ) => (lang === options.defaultLanguage
-        ? pathname
-        : `/${lang}${pathname}`)
-      )
-      : [pathname]
+    const mtime = (await Deno.stat(path)).mtime ?? new Date()
 
-    for (const urlPath of urlPaths) {
-      const { mtime } = await Deno.stat(path)
+    // For each language, generate the URL
+    for (const lang of options.languages) {
+      // Construct the URL path as /[locale]/[...slug]
+      const urlPath = `/${lang}/${slug}`
+
       sitemap.push({
         loc: basename.replace(/\/+$/, '') + urlPath,
-        lastmod: (mtime ?? new Date()).toISOString(),
+        lastmod: mtime.toISOString(),
       })
     }
   }
@@ -262,9 +235,30 @@ async function generateArticlesSitemap(
 }
 
 /**
+ * Finds the dynamic route file that can handle articles (e.g., [...slug].tsx)
+ */
+function findDynamicRoute(distDirectory: string): string | null {
+  const dynamicRoutePattern = /\[\.\.\..*\]\.tsx$/
+
+  // Use a stack for directories to process
+  const directories = [distDirectory]
+  while (directories.length > 0) {
+    const currentDir = directories.pop()!
+    for (const entry of Deno.readDirSync(currentDir)) {
+      const entryPath = join(currentDir, entry.name)
+      if (entry.isFile && dynamicRoutePattern.test(entry.name)) {
+        // Found the dynamic route
+        return entryPath
+      } else if (entry.isDirectory) {
+        directories.push(entryPath)
+      }
+    }
+  }
+  return null
+}
+
+/**
  * Recursively iterates through a directory to retrieve all file paths in a stable, sorted order.
- * @param directory - Directory path to recurse
- * @returns Generator of file paths
  */
 async function* stableRecurseFiles(directory: string): AsyncGenerator<string> {
   const itr = Deno.readDir(directory)
@@ -287,8 +281,6 @@ async function* stableRecurseFiles(directory: string): AsyncGenerator<string> {
 
 /**
  * Converts a Sitemap array to an XML string in the required format.
- * @param sitemap - Array of sitemap entries
- * @returns Generated XML string
  */
 function sitemapToXML(sitemap: Sitemap): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
