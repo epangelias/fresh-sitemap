@@ -30,23 +30,23 @@ export interface SiteMapOptions {
  * Generates a sitemap XML string from specified directories and a base URL.
  * @param basename - The base URL of the website (e.g., 'https://example.com')
  * @param distDirectory - The directory containing route files
- * @param articlesDirectory - The directory containing articles in markdown format
+ * @param postsDirectory - The directory containing posts in markdown format
  * @param options - Options for sitemap generation, including languages and default language
  * @returns The generated sitemap as an XML string
  */
 export async function generateSitemapXML(
   basename: string,
   distDirectory: string,
-  articlesDirectory: string,
+  postsDirectory: string,
   options: SiteMapOptions = {},
 ): Promise<string> {
   const routesSitemap = await generateSitemap(basename, distDirectory, options)
-  const articlesSitemap = await generateArticlesSitemap(
+  const postsSitemap = await generatePostsSitemap(
     basename,
-    articlesDirectory,
+    postsDirectory,
     options,
   )
-  const sitemap = [...routesSitemap, ...articlesSitemap]
+  const sitemap = [...routesSitemap, ...postsSitemap]
   return sitemapToXML(sitemap)
 }
 
@@ -72,7 +72,7 @@ Sitemap: https://${domain}/sitemap.xml
  * Saves the generated sitemap XML and robots.txt files to specified file paths.
  * @param basename - The base URL of the website
  * @param distDirectory - The directory containing route files
- * @param articlesDirectory - The directory containing articles
+ * @param postsDirectory - The directory containing posts
  * @param sitemapPath - Path where sitemap.xml will be saved
  * @param robotsPath - Path where robots.txt will be saved
  * @param options - Options for sitemap generation, including languages and default language
@@ -80,7 +80,7 @@ Sitemap: https://${domain}/sitemap.xml
 export async function saveSitemapAndRobots(
   basename: string,
   distDirectory: string,
-  articlesDirectory: string,
+  postsDirectory: string,
   sitemapPath: string,
   robotsPath: string,
   options: SiteMapOptions = {},
@@ -89,7 +89,7 @@ export async function saveSitemapAndRobots(
   const sitemapXML = await generateSitemapXML(
     basename,
     distDirectory,
-    articlesDirectory,
+    postsDirectory,
     options,
   )
   const robotsTxt = generateRobotsTxt(domain)
@@ -141,6 +141,7 @@ function checkSegments(
 
 /**
  * Generates sitemap entries for static routes, excluding dynamic and grouping directories.
+ * Uses a Map to ensure unique `loc` values in the sitemap, keeping only the most recent `lastmod` value.
  * @param basename - The base URL of the website (e.g., 'https://example.com')
  * @param distDirectory - Directory containing route files
  * @param options - Options for sitemap generation, including languages and default language
@@ -151,7 +152,8 @@ async function generateSitemap(
   distDirectory: string,
   options: SiteMapOptions,
 ): Promise<Sitemap> {
-  const sitemapSet = new Set<string>()
+  const sitemapMap = new Map<string, string>() // Key: loc, Value: lastmod
+
   const pathMap: Record<string, number> = {}
 
   function processPathSegments(path: string): void {
@@ -200,17 +202,23 @@ async function generateSitemap(
       )
 
       options.languages?.forEach((lang) => {
-        sitemapSet.add(
-          JSON.stringify({
-            loc: `${basename}/${lang}${cleanedPath}`,
-            lastmod: (mtime ?? new Date()).toISOString(),
-          }),
-        )
+        const loc = `${basename}/${lang}${cleanedPath}`
+        const lastmod = (mtime ?? new Date()).toISOString()
+
+        // Check for existing loc and update lastmod if new date is more recent
+        const existingLastmod = sitemapMap.get(loc)
+        if (!existingLastmod || new Date(lastmod) > new Date(existingLastmod)) {
+          sitemapMap.set(loc, lastmod)
+        }
       })
     }
   }
 
-  return Array.from(sitemapSet).map((entry) => JSON.parse(entry)) as Sitemap
+  // Convert Map to Sitemap array
+  return Array.from(sitemapMap.entries()).map(([loc, lastmod]) => ({
+    loc,
+    lastmod,
+  }))
 }
 
 /**
@@ -242,33 +250,34 @@ async function findFolderPathRecursively(
 }
 
 /**
- * Generates sitemap entries for markdown articles, respecting language settings.
+ * Generates sitemap entries for markdown posts, respecting language settings.
+ * Checks for existing routes and builds a path for each post.
  * @param basename - The base URL
- * @param articlesDirectory - Directory containing article markdown files
+ * @param postsDirectory - Directory containing post markdown files
  * @param options - Options for sitemap generation, including languages
- * @returns Array of sitemap entries for articles
+ * @returns Array of sitemap entries for posts
  */
-async function generateArticlesSitemap(
+async function generatePostsSitemap(
   basename: string,
-  articlesDirectory: string,
+  postsDirectory: string,
   options: SiteMapOptions,
 ): Promise<Sitemap> {
   const sitemap: Sitemap = []
   const languages = options.languages || []
 
-  if (!(await exists(articlesDirectory))) return sitemap
+  if (!(await exists(postsDirectory))) return sitemap
 
   async function addMarkdownFile(path: string) {
     const relPath = path.replace(/\.md$/, '')
     const segments = relPath.split(SEPARATOR)
-    const articleType = segments[1]
-    const articleRoute = await findFolderPathRecursively(
+    const postType = segments[1]
+    const postRoute = await findFolderPathRecursively(
       './routes',
-      articleType,
+      postType,
     )
-    if (!articleRoute) return
+    if (!postRoute) return
 
-    const routeSegments = articleRoute.replace('./routes', '').split(
+    const routeSegments = postRoute.replace('./routes', '').split(
       SEPARATOR,
     )
 
@@ -295,7 +304,7 @@ async function generateArticlesSitemap(
     }
   }
 
-  for await (const path of stableRecurseFiles(articlesDirectory)) {
+  for await (const path of stableRecurseFiles(postsDirectory)) {
     if (path.endsWith('.md')) {
       await addMarkdownFile(path)
     }
