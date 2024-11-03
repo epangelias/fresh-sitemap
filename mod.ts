@@ -46,8 +46,25 @@ export async function generateSitemapXML(
     postsDirectory,
     options,
   )
-  const sitemap = [...routesSitemap, ...postsSitemap]
-  return sitemapToXML(sitemap)
+  // Combine both sitemaps
+  const combinedSitemap = [...routesSitemap, ...postsSitemap]
+
+  // Remove duplicates and keep only the latest `lastmod` for each `loc`
+  const sitemapMap = new Map<string, string>()
+  for (const entry of combinedSitemap) {
+    const { loc, lastmod } = entry
+    const existingLastmod = sitemapMap.get(loc)
+    if (!existingLastmod || new Date(lastmod) > new Date(existingLastmod)) {
+      sitemapMap.set(loc, lastmod)
+    }
+  }
+
+  // Convert Map to array for XML generation
+  const uniqueSitemap = Array.from(sitemapMap.entries()).map(
+    ([loc, lastmod]) => ({ loc, lastmod }),
+  )
+
+  return sitemapToXML(uniqueSitemap)
 }
 
 /**
