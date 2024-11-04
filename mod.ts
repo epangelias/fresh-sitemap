@@ -27,6 +27,24 @@ export interface SiteMapOptions {
 }
 
 /**
+ * Configuration options for saving the sitemap and robots.txt.
+ */
+export interface SitemapConfig {
+  /** The base URL of the website (e.g., 'https://example.com') */
+  basename: string
+  /** Directory containing route files */
+  distDirectory: string
+  /** Directory containing posts in markdown format */
+  postsDirectory: string
+  /** Path to save the generated sitemap XML */
+  sitemapPath: string
+  /** Path to save the generated robots.txt */
+  robotsPath: string
+  /** Additional options for sitemap generation, including languages */
+  options?: SiteMapOptions
+}
+
+/**
  * Generates a sitemap XML string from specified directories and a base URL.
  * @param basename - The base URL of the website (e.g., 'https://example.com')
  * @param distDirectory - The directory containing route files
@@ -87,21 +105,20 @@ Sitemap: https://${domain}/sitemap.xml
 
 /**
  * Saves the generated sitemap XML and robots.txt files to specified file paths.
- * @param basename - The base URL of the website
- * @param distDirectory - The directory containing route files
- * @param postsDirectory - The directory containing posts
- * @param sitemapPath - Path where sitemap.xml will be saved
- * @param robotsPath - Path where robots.txt will be saved
- * @param options - Options for sitemap generation, including languages and default language
+ * @param config - Configuration object for sitemap and robots.txt generation
  */
 export async function saveSitemapAndRobots(
-  basename: string,
-  distDirectory: string,
-  postsDirectory: string,
-  sitemapPath: string,
-  robotsPath: string,
-  options: SiteMapOptions = {},
+  config: SitemapConfig,
 ): Promise<void> {
+  const {
+    basename,
+    distDirectory,
+    postsDirectory,
+    sitemapPath,
+    robotsPath,
+    options = {},
+  } = config
+
   const domain = new URL(basename).hostname
   const sitemapXML = await generateSitemapXML(
     basename,
