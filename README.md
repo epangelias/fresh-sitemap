@@ -20,7 +20,7 @@ languages and a default language without a language prefix.
    Import the functions from the module to use within your Fresh project.
 
    ```typescript
-   import { saveSitemap } from 'jsr:@elsoul/fresh-sitemap'
+   import { saveSitemapAndRobots } from 'jsr:@elsoul/fresh-sitemap'
    ```
 
 2. **Run the Plugin**
